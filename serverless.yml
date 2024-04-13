@@ -1,0 +1,128 @@
+service: awscc-photobooth
+frameworkVersion: "3"
+
+provider:
+    name: aws
+    runtime: python3.8
+    profile: awscc-backend
+    region: ap-southeast-1
+    timeout: 16
+    memorySize: 256
+    environment:
+        TABLE: awscc-photobooth-app
+        BUCKET: awscc-photobooth
+        SECRET_TOKEN: 230b9b2883da2ab864be6cc230814956069966cd2e0d9e79f12d8b428b1e2eb7
+        API_URL: https://08np3d0io7.execute-api.ap-southeast-1.amazonaws.com
+    deploymentBucket:
+        name: awscc-photobooth
+        blockPublicAccess: true
+    iam:
+        role:
+            name: awscc-photobooth-role
+            statements:
+                - Effect: "Allow"
+                  Action:
+                      - "dynamodb:*"
+                      - "s3:*"
+                      - "lambda:*"
+                      - "ses:*"
+                      - "cloudwatch:*"
+                  Resource:
+                      - "*"
+    layers:
+        - arn:aws:lambda:ap-southeast-1:876497563387:layer:PhotoboothAppDependencies:2
+        - arn:aws:lambda:ap-southeast-1:876497563387:layer:PyJWT:1
+    httpApi:
+        authorizers:
+            customAuthorizer:
+                type: request
+                identitySource:
+                    - $request.header.Authorization
+                functionName: tokenAuthorizer
+
+functions:
+    tokenAuthorizer:
+        handler: src/authorizers/tokenAuthorizer.handler
+
+    hello:
+        handler: src/hello.handler
+        events:
+            - httpApi:
+                  path: /hello
+                  method: get
+
+    register:
+        handler: src/register.handler
+        events:
+            - httpApi:
+                  path: /register
+                  method: post
+
+    login:
+        handler: src/login.handler
+        events:
+            - httpApi:
+                  path: /login
+                  method: post
+
+    create_request:
+        handler: src/create_request.handler
+        events:
+            - httpApi:
+                  path: /create_request
+                  method: post
+
+    delete_request:
+        handler: src/delete_request.handler
+        events:
+            - httpApi:
+                  path: /delete_request
+                  method: post
+
+    get_requests:
+        handler: src/get_requests.handler
+        events:
+            - httpApi:
+                  path: /get_requests
+                  method: get
+
+    generate_presigned:
+        handler: src/generate_presigned.handler
+        events:
+            - httpApi:
+                  path: /generate_presigned
+                  method: post
+
+    template_pictures:
+        handler: src/template_pictures.handler
+        events:
+            - s3:
+                  bucket: ${self:provider.environment.BUCKET}
+                  event: "s3:ObjectCreated:*"
+                  rules:
+                      - prefix: raw_photos/
+                  existing: true
+                  forceDeploy: true
+        memorySize: 3000
+        timeout: 30
+
+    send_email:
+        handler: src/send_email.handler
+        events:
+            - httpApi:
+                  path: /send_email
+                  method: post
+
+package:
+    patterns:
+        - "!venv/**"
+        - "!node_modules/**"
+        - "!package-lock.json"
+        - "!package.json"
+        - "!scratch_files/**"
+        - "!requirements.txt"
+        - "!.git"
+
+plugins:
+    - serverless-python-requirements
+    - serverless-deployment-bucket
